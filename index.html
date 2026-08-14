@@ -1,0 +1,1677 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LabelSketch</title>
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #14171c;
+    --bg-panel: #1b1f26;
+    --bg-elevated: #232833;
+    --border: #2e3542;
+    --text: #e8eaed;
+    --text-dim: #9aa3b2;
+    --accent: #5aa9e6;
+    --accent-dim: #2f4a63;
+    --danger: #e15b64;
+    --ok: #5ec98f;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Top bar */
+  #topbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 14px;
+    background: var(--bg-panel);
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+  }
+  #topbar .brand { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
+  #topbar .brand img { width: 22px; height: 22px; display: block; }
+  #topbar h1 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0;
+    white-space: nowrap;
+    color: var(--text);
+  }
+  #topbar h1 span { color: var(--text-dim); font-weight: 400; }
+  #topbar .spacer { flex: 1 1 auto; }
+
+  .btn {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent-dim); border-color: var(--accent); }
+  .btn.danger:hover { border-color: var(--danger); color: var(--danger); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; border-color: var(--border) !important; }
+
+  label.check {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 12px; color: var(--text-dim); white-space: nowrap;
+  }
+
+  /* Main layout */
+  #main { flex: 1 1 auto; display: flex; min-height: 0; }
+  #canvasArea { flex: 1 1 auto; position: relative; display: flex; flex-direction: column; min-width: 0; }
+
+  #toolbar {
+    position: absolute; top: 10px; left: 10px; z-index: 10;
+    display: flex; flex-direction: column; gap: 4px;
+    background: var(--bg-elevated); padding: 4px; border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .tool-btn {
+    width: 32px; height: 32px; display: flex; align-items: center; justify-content: center;
+    padding: 0; background: transparent; border: 1px solid transparent; border-radius: 6px;
+    color: var(--text-dim); cursor: pointer;
+  }
+  .tool-btn:hover { color: var(--text); background: var(--bg-panel); }
+  .tool-btn.active { color: var(--text); background: var(--accent-dim); border-color: var(--accent); }
+  .tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  #toolHint {
+    position: absolute; top: 10px; left: 56px; right: 10px; z-index: 9;
+    pointer-events: none;
+  }
+  #toolHint span {
+    display: inline-block; background: var(--bg-elevated); border: 1px solid var(--border);
+    color: var(--text-dim); font-size: 11.5px; padding: 5px 10px; border-radius: 6px;
+  }
+
+  #zoomControls {
+    position: absolute; bottom: 10px; right: 10px; z-index: 10;
+    display: flex; align-items: center; gap: 2px;
+    background: var(--bg-elevated); padding: 4px; border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  #zoomControls .btn { padding: 5px 9px; }
+  #zoomPct { font-size: 11.5px; color: var(--text-dim); padding: 0 6px; min-width: 42px; text-align: center; }
+
+  #canvasWrap {
+    flex: 1 1 auto; overflow: auto; background: #0d0f13; display: flex;
+  }
+  #canvasWrap.empty { align-items: center; justify-content: center; }
+  #canvasWrap:not(.empty) { align-items: flex-start; justify-content: flex-start; padding: 24px; }
+  #canvasWrap.dragover { outline: 2px dashed var(--accent); outline-offset: -8px; }
+  #stage { display: block; cursor: default; }
+  #stage.tool-bbox, #stage.tool-polygon { cursor: crosshair; }
+  #stage.tool-zoom { cursor: zoom-in; }
+  #stage.tool-zoom.tool-zoom-out { cursor: zoom-out; }
+  #stage.panning { cursor: grabbing; }
+
+  #labelMenu {
+    position: fixed; z-index: 2000; min-width: 150px;
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 8px;
+    padding: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  }
+  #labelMenu.hidden { display: none; }
+  #labelMenu .menu-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 9px; border-radius: 5px; font-size: 12.5px; cursor: pointer;
+  }
+  #labelMenu .menu-item:hover { background: var(--accent-dim); }
+  #labelMenu .menu-item.current { color: var(--accent); }
+  #labelMenu .menu-item.danger:hover { background: rgba(225,91,100,0.15); color: var(--danger); }
+  #labelMenu .menu-swatch {
+    width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+  #labelMenu .menu-sep { height: 1px; background: var(--border); margin: 4px 2px; }
+  #labelMenu .menu-empty { padding: 6px 9px; font-size: 12px; color: var(--text-dim); max-width: 200px; }
+  #emptyState {
+    color: var(--text-dim); text-align: center; padding: 40px; max-width: 380px;
+    font-size: 13px; line-height: 1.6;
+  }
+  #emptyState .btn { margin-top: 12px; }
+
+  #sidebar {
+    width: 320px;
+    flex: 0 0 auto;
+    background: var(--bg-panel);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+  .sidebar-section {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    flex: 0 0 auto;
+  }
+  .sidebar-section.grow { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 90px; padding-bottom: 0; }
+  .sidebar-section h2 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-dim);
+    margin: 0 0 8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .list-scroll { overflow-y: auto; }
+  #imageList { max-height: 150px; }
+  #classList { max-height: 130px; }
+  #annotList { flex: 1 1 auto; min-height: 0; }
+
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 12.5px;
+  }
+  .row:hover { background: var(--bg-elevated); }
+  .row.selected { background: var(--accent-dim); }
+  .swatch {
+    width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto;
+    border: 1px solid rgba(255,255,255,0.3);
+  }
+  .thumb {
+    width: 28px; height: 28px; border-radius: 4px; object-fit: cover; flex: 0 0 auto;
+    border: 1px solid var(--border);
+  }
+  .row .rname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .rtype { color: var(--text-dim); font-size: 11px; flex: 0 0 auto; }
+  .row .rdel { opacity: 0.5; font-size: 12px; padding: 2px 5px; flex: 0 0 auto; }
+  .row .rdel:hover { opacity: 1; color: var(--danger); }
+  .empty-hint { padding: 14px; color: var(--text-dim); font-size: 12px; line-height: 1.5; }
+
+  .field-row { display: flex; gap: 6px; margin-bottom: 8px; align-items: center; }
+  .field-row input, .field-row select {
+    background: var(--bg-elevated); border: 1px solid var(--border); color: var(--text);
+    padding: 5px 7px; border-radius: 5px; font-size: 12.5px; min-width: 0;
+  }
+  .field-row input { flex: 1 1 auto; }
+  .field-row select { flex: 1 1 auto; }
+  .field-row label { font-size: 11.5px; color: var(--text-dim); flex: 0 0 36%; }
+
+  #tagChips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+  .chip {
+    display: flex; align-items: center; gap: 5px;
+    background: var(--bg-elevated); border: 1px solid var(--border); border-radius: 12px;
+    padding: 3px 8px 3px 10px; font-size: 12px;
+  }
+  .chip button { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 13px; padding: 0; line-height: 1; }
+  .chip button:hover { color: var(--danger); }
+
+  #bottomPanel { flex: 0 0 auto; max-height: 42vh; overflow-y: auto; }
+  #annotEditor.hidden { display: none; }
+  #annotEditor { margin-top: 10px; border-top: 1px solid var(--border); padding-top: 10px; }
+  .meta-line { font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
+
+  /* Status bar */
+  #statusbar {
+    flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 14px; background: var(--bg-panel); border-top: 1px solid var(--border);
+    font-size: 11.5px; color: var(--text-dim);
+  }
+  #statusbar .right { display: flex; gap: 14px; align-items: center; }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <div class="brand">
+    <img src="assets/logo.svg" alt="LabelSketch logo">
+    <h1>LabelSketch <span>· draw boxes &amp; polygons, tag classes, export JSON</span></h1>
+  </div>
+  <div class="spacer"></div>
+  <input id="importImagesInput" type="file" accept="image/*" multiple style="display:none">
+  <button class="btn" id="importImagesBtn">Import Images</button>
+  <input id="importJsonInput" type="file" accept=".json" style="display:none">
+  <button class="btn" id="importJsonBtn">Import Labels JSON</button>
+  <label class="check"><input type="checkbox" id="embedImagesChk"> embed images</label>
+  <button class="btn primary" id="exportBtn">Export Labels JSON</button>
+  <label class="check"><input type="checkbox" id="keepOriginalNamesChk" checked> keep original filenames in manifest</label>
+  <button class="btn primary" id="exportZipBtn" title="Renamed images + per-image label JSON + manifest, packaged as a .zip">Export Dataset (ZIP)</button>
+</div>
+
+<div id="main">
+  <div id="canvasArea">
+    <div id="toolbar">
+      <button class="tool-btn active" id="toolSelect" title="Select (V)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l7 16 2-7 7-2-16-7z"/></svg>
+      </button>
+      <button class="tool-btn" id="toolBbox" title="Bounding box (B)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="5" width="16" height="14" rx="1"/></svg>
+      </button>
+      <button class="tool-btn" id="toolPolygon" title="Polygon (P)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12,3 21,9 18,20 6,20 3,9"/></svg>
+      </button>
+      <button class="tool-btn" id="toolZoom" title="Zoom in (click again to switch to zoom out)">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>
+      </button>
+    </div>
+    <div id="toolHint"><span id="toolHintText">Import images to begin.</span></div>
+    <div id="zoomControls">
+      <button class="btn" id="zoomOut" title="Zoom out">−</button>
+      <span id="zoomPct">100%</span>
+      <button class="btn" id="zoomIn" title="Zoom in">+</button>
+      <button class="btn" id="zoomFit" title="Fit to window">Fit</button>
+      <button class="btn" id="zoom100" title="Actual size">100%</button>
+    </div>
+    <div id="canvasWrap" class="empty" title="Ctrl/Cmd + scroll (or pinch) to zoom, scroll to pan">
+      <div id="emptyState">
+        No images loaded.<br>Drag &amp; drop image files here, or use <b>Import Images</b> above.
+        <br><button class="btn" id="emptyImportBtn">Import Images</button>
+      </div>
+      <canvas id="stage" style="display:none;"></canvas>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sidebar-section">
+      <h2>Images <span id="imageCount">0</span></h2>
+      <div id="imageList" class="list-scroll">
+        <div class="empty-hint">No images yet.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h2>Classes</h2>
+      <div class="field-row">
+        <input id="newClassInput" placeholder="New class name">
+        <button class="btn" id="addClassBtn">+ add</button>
+      </div>
+      <div id="classList" class="list-scroll">
+        <div class="empty-hint">Add a class, then pick a drawing tool to start tagging regions.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section grow">
+      <h2>Annotations <span id="annotCount">0</span></h2>
+      <div id="annotList" class="list-scroll">
+        <div class="empty-hint">No annotations on this image yet.</div>
+      </div>
+    </div>
+
+    <div class="sidebar-section" id="bottomPanel">
+      <h2>Image tags</h2>
+      <div id="tagChips"></div>
+      <div class="field-row">
+        <input id="newTagInput" placeholder="Add a whole-image tag, press Enter">
+      </div>
+
+      <div id="annotEditor" class="hidden">
+        <h2>Selected annotation</h2>
+        <div class="field-row">
+          <label>Class</label>
+          <select id="annotClassSelect"></select>
+        </div>
+        <div class="meta-line" id="annotMeta"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="statusbar">
+  <div id="statusLeft">0 images · 0 annotations</div>
+  <div class="right">
+    <span id="zoomStatus"></span>
+  </div>
+</div>
+
+<div id="labelMenu" class="hidden"></div>
+
+<script>
+(function () {
+  "use strict";
+
+  const MAX_DIM = 2048;
+  const PALETTE = ['#5aa9e6', '#e1a35b', '#5ec98f', '#e15b64', '#c48be0', '#e6d95a'];
+
+  const state = {
+    images: [],
+    currentImageId: null,
+    classes: [],
+    activeClassName: null,
+    selectedAnnotationId: null,
+    tool: 'select',
+    zoom: 1,
+    zoomDir: 'in'
+  };
+
+  let imageSeq = 0;
+  let annotSeq = 0;
+  let isPointerDown = false;
+  let dragStart = null;
+  let draftBBox = null;
+  let draftPoints = [];
+  let hoverPos = null;
+
+  // edit-drag state (moving/resizing an existing annotation in select mode)
+  let editMode = null; // null | 'move' | 'handle'
+  let editAnnotation = null;
+  let editHandleIndex = -1;
+  let editSnapshot = null;
+  let editFixedCorner = null;
+  let editDragOrigin = null;
+
+  // pan-drag state (select tool: drag empty canvas space)
+  let isPanning = false;
+  let panStart = null;
+  let panScrollStart = null;
+
+  const ICON_ZOOM_IN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>';
+  const ICON_ZOOM_OUT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>';
+
+  // ---------- DOM refs ----------
+  const stage = document.getElementById('stage');
+  const ctx = stage.getContext('2d');
+  const canvasWrap = document.getElementById('canvasWrap');
+  const emptyState = document.getElementById('emptyState');
+  const toolHintText = document.getElementById('toolHintText');
+
+  const imageListEl = document.getElementById('imageList');
+  const imageCountEl = document.getElementById('imageCount');
+  const classListEl = document.getElementById('classList');
+  const annotListEl = document.getElementById('annotList');
+  const annotCountEl = document.getElementById('annotCount');
+
+  const tagChipsEl = document.getElementById('tagChips');
+  const newTagInput = document.getElementById('newTagInput');
+  const annotEditor = document.getElementById('annotEditor');
+  const annotClassSelect = document.getElementById('annotClassSelect');
+  const annotMeta = document.getElementById('annotMeta');
+
+  const statusLeft = document.getElementById('statusLeft');
+  const zoomStatus = document.getElementById('zoomStatus');
+  const zoomPct = document.getElementById('zoomPct');
+  const labelMenu = document.getElementById('labelMenu');
+
+  // ---------- Helpers ----------
+  function currentImage() {
+    return state.images.find(im => im.id === state.currentImageId) || null;
+  }
+  function classColor(name) {
+    const c = state.classes.find(c => c.name === name);
+    return c ? c.color : '#5aa9e6';
+  }
+  function hexToRgba(hex, alpha) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex) || [];
+    const r = parseInt(m[1] || '5a', 16), g = parseInt(m[2] || 'a9', 16), b = parseInt(m[3] || 'e6', 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+  function round2(n) { return Math.round(n * 100) / 100; }
+  function round4(n) { return Math.round(n * 10000) / 10000; }
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  function polygonArea(points) {
+    let a = 0;
+    for (let i = 0; i < points.length; i++) {
+      const [x1, y1] = points[i], [x2, y2] = points[(i + 1) % points.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(a / 2);
+  }
+  function pointInPolygon(pt, points) {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const xi = points[i][0], yi = points[i][1], xj = points[j][0], yj = points[j][1];
+      const intersect = ((yi > pt.y) !== (yj > pt.y)) &&
+        (pt.x < (xj - xi) * (pt.y - yi) / (yj - yi) + xi);
+      if (intersect) inside = !inside;
+    }
+    return inside;
+  }
+
+  // ---------- Image import ----------
+  function uniqueName(name) {
+    let candidate = name, n = 2;
+    const taken = new Set(state.images.map(im => im.filename));
+    while (taken.has(candidate)) {
+      const dot = name.lastIndexOf('.');
+      candidate = dot === -1 ? `${name} (${n})` : `${name.slice(0, dot)} (${n})${name.slice(dot)}`;
+      n++;
+    }
+    return candidate;
+  }
+
+  function loadImageFile(file) {
+    if (!file.type || !file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+        const workingWidth = Math.max(1, Math.round(img.naturalWidth * scale));
+        const workingHeight = Math.max(1, Math.round(img.naturalHeight * scale));
+        const id = ++imageSeq;
+        state.images.push({
+          id, filename: uniqueName(file.name), dataUrl: reader.result, img,
+          naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight,
+          workingWidth, workingHeight, tags: [], annotations: [],
+          hashId: computeHashId(reader.result)
+        });
+        renderImageList();
+        if (state.currentImageId == null) setActiveImage(id);
+        updateStatus();
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  document.getElementById('importImagesBtn').addEventListener('click', () => document.getElementById('importImagesInput').click());
+  document.getElementById('emptyImportBtn').addEventListener('click', () => document.getElementById('importImagesInput').click());
+  document.getElementById('importImagesInput').addEventListener('change', (e) => {
+    Array.from(e.target.files).forEach(loadImageFile);
+    e.target.value = '';
+  });
+
+  canvasWrap.addEventListener('dragover', (e) => { e.preventDefault(); canvasWrap.classList.add('dragover'); });
+  canvasWrap.addEventListener('dragleave', () => canvasWrap.classList.remove('dragover'));
+  canvasWrap.addEventListener('drop', (e) => {
+    e.preventDefault();
+    canvasWrap.classList.remove('dragover');
+    Array.from(e.dataTransfer.files).forEach(loadImageFile);
+  });
+
+  function deleteImage(id) {
+    state.images = state.images.filter(im => im.id !== id);
+    if (state.currentImageId === id) {
+      state.currentImageId = null;
+      state.selectedAnnotationId = null;
+      if (state.images.length) setActiveImage(state.images[0].id);
+      else { showEmpty(); renderAll(); }
+    } else {
+      renderImageList();
+      updateStatus();
+    }
+  }
+
+  function renderImageList() {
+    imageCountEl.textContent = state.images.length;
+    if (!state.images.length) {
+      imageListEl.innerHTML = '<div class="empty-hint">No images yet.</div>';
+      return;
+    }
+    imageListEl.innerHTML = '';
+    state.images.forEach(im => {
+      const row = document.createElement('div');
+      row.className = 'row' + (im.id === state.currentImageId ? ' selected' : '');
+      const thumb = document.createElement('img');
+      thumb.className = 'thumb';
+      thumb.src = im.dataUrl;
+      const name = document.createElement('div');
+      name.className = 'rname';
+      name.textContent = im.filename;
+      const count = document.createElement('div');
+      count.className = 'rtype';
+      count.textContent = im.annotations.length ? im.annotations.length : '';
+      const del = document.createElement('div');
+      del.className = 'rdel';
+      del.textContent = '✕';
+      del.title = 'Remove image';
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteImage(im.id); });
+      row.appendChild(thumb);
+      row.appendChild(name);
+      row.appendChild(count);
+      row.appendChild(del);
+      row.addEventListener('click', () => setActiveImage(im.id));
+      imageListEl.appendChild(row);
+    });
+  }
+
+  // ---------- Active image / canvas setup ----------
+  function showEmpty() {
+    canvasWrap.classList.add('empty');
+    emptyState.style.display = 'block';
+    stage.style.display = 'none';
+    toolHintText.textContent = 'Import images to begin.';
+  }
+  function showCanvas() {
+    canvasWrap.classList.remove('empty');
+    emptyState.style.display = 'none';
+    stage.style.display = 'block';
+  }
+
+  function setActiveImage(id) {
+    state.currentImageId = id;
+    state.selectedAnnotationId = null;
+    draftPoints = []; draftBBox = null; isPointerDown = false;
+    const im = currentImage();
+    if (!im) { showEmpty(); renderAll(); return; }
+    showCanvas();
+    stage.width = im.workingWidth;
+    stage.height = im.workingHeight;
+    fitZoom();
+    renderAll();
+  }
+
+  const CANVAS_PAD = 24; // must match #canvasWrap:not(.empty) padding in CSS
+
+  function fitZoom() {
+    const im = currentImage();
+    if (!im) return;
+    const cw = canvasWrap.clientWidth - CANVAS_PAD * 2;
+    const ch = canvasWrap.clientHeight - CANVAS_PAD * 2;
+    const z = Math.min(cw / im.workingWidth, ch / im.workingHeight);
+    setZoom(Math.max(0.05, Math.min(z, 8)));
+  }
+
+  // zoom to `z`, keeping the image point under (clientX, clientY) fixed on screen;
+  // defaults to the viewport center so button clicks zoom "in place" instead of jumping to a corner
+  function setZoom(z, clientX, clientY) {
+    const im = currentImage();
+    const newZoom = Math.max(0.05, Math.min(z, 8));
+    if (!im) { state.zoom = newZoom; zoomPct.textContent = Math.round(newZoom * 100) + '%'; return; }
+
+    const rectWrap = canvasWrap.getBoundingClientRect();
+    if (clientX == null || clientY == null) {
+      clientX = rectWrap.left + rectWrap.width / 2;
+      clientY = rectWrap.top + rectWrap.height / 2;
+    }
+    // image-pixel coordinate currently under the cursor, at the OLD zoom
+    const imgX = (canvasWrap.scrollLeft + (clientX - rectWrap.left) - CANVAS_PAD) / state.zoom;
+    const imgY = (canvasWrap.scrollTop + (clientY - rectWrap.top) - CANVAS_PAD) / state.zoom;
+
+    state.zoom = newZoom;
+    stage.style.width = Math.round(im.workingWidth * state.zoom) + 'px';
+    stage.style.height = Math.round(im.workingHeight * state.zoom) + 'px';
+    zoomPct.textContent = Math.round(state.zoom * 100) + '%';
+
+    // re-scroll so that same image pixel lands back under the cursor at the NEW zoom
+    canvasWrap.scrollLeft = imgX * state.zoom + CANVAS_PAD - (clientX - rectWrap.left);
+    canvasWrap.scrollTop = imgY * state.zoom + CANVAS_PAD - (clientY - rectWrap.top);
+
+    redrawCanvas();
+    updateStatus();
+  }
+  document.getElementById('zoomIn').addEventListener('click', () => setZoom(state.zoom * 1.25));
+  document.getElementById('zoomOut').addEventListener('click', () => setZoom(state.zoom / 1.25));
+  document.getElementById('zoomFit').addEventListener('click', fitZoom);
+  document.getElementById('zoom100').addEventListener('click', () => setZoom(1));
+
+  // Mouse wheel / trackpad scroll zooms toward the cursor (no modifier key needed).
+  // To pan: switch to the select tool and drag empty canvas space, or drag the scrollbars.
+  canvasWrap.addEventListener('wheel', (e) => {
+    if (!currentImage()) return;
+    e.preventDefault();
+    const factor = Math.exp(-e.deltaY * 0.01);
+    setZoom(state.zoom * factor, e.clientX, e.clientY);
+  }, { passive: false });
+
+  // ---------- Classes ----------
+  function addClass(name) {
+    name = name.trim();
+    if (!name) return;
+    if (!state.classes.some(c => c.name === name)) {
+      const color = PALETTE[state.classes.length % PALETTE.length];
+      state.classes.push({ name, color });
+    }
+    state.activeClassName = name;
+    renderClassList();
+  }
+  function deleteClass(name) {
+    state.classes = state.classes.filter(c => c.name !== name);
+    if (state.activeClassName === name) state.activeClassName = state.classes.length ? state.classes[0].name : null;
+    renderClassList();
+  }
+  function setActiveClass(name) { state.activeClassName = name; renderClassList(); }
+
+  document.getElementById('addClassBtn').addEventListener('click', () => {
+    const input = document.getElementById('newClassInput');
+    addClass(input.value);
+    input.value = '';
+  });
+  document.getElementById('newClassInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('addClassBtn').click();
+  });
+
+  function renderClassList() {
+    if (!state.classes.length) {
+      classListEl.innerHTML = '<div class="empty-hint">Add a class, then pick a drawing tool to start tagging regions.</div>';
+    } else {
+      classListEl.innerHTML = '';
+      state.classes.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'row' + (c.name === state.activeClassName ? ' selected' : '');
+        const sw = document.createElement('div');
+        sw.className = 'swatch';
+        sw.style.background = c.color;
+        const name = document.createElement('div');
+        name.className = 'rname';
+        name.textContent = c.name;
+        const del = document.createElement('div');
+        del.className = 'rdel';
+        del.textContent = '✕';
+        del.title = 'Remove class';
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteClass(c.name); });
+        row.appendChild(sw);
+        row.appendChild(name);
+        row.appendChild(del);
+        row.addEventListener('click', () => setActiveClass(c.name));
+        classListEl.appendChild(row);
+      });
+    }
+    populateAnnotClassSelect();
+  }
+
+  // ---------- Tools ----------
+  function setTool(tool) {
+    if (tool !== 'select' && !currentImage()) return;
+    state.tool = tool;
+    draftPoints = []; draftBBox = null; isPointerDown = false;
+    editMode = null; editAnnotation = null; editHandleIndex = -1; editSnapshot = null; editFixedCorner = null; editDragOrigin = null;
+    isPanning = false; panStart = null; panScrollStart = null;
+    stage.style.cursor = '';
+    document.getElementById('toolSelect').classList.toggle('active', tool === 'select');
+    document.getElementById('toolBbox').classList.toggle('active', tool === 'bbox');
+    document.getElementById('toolPolygon').classList.toggle('active', tool === 'polygon');
+    document.getElementById('toolZoom').classList.toggle('active', tool === 'zoom');
+    stage.classList.toggle('tool-bbox', tool === 'bbox');
+    stage.classList.toggle('tool-polygon', tool === 'polygon');
+    stage.classList.toggle('tool-zoom', tool === 'zoom');
+    updateZoomToolUI();
+    hideLabelMenu();
+    if (currentImage()) {
+      toolHintText.textContent =
+        tool === 'select' ? 'Click a shape to select it, drag its body to move it, drag a handle to resize/reshape. Drag empty space to pan. Right-click a shape to change its label. Delete/Backspace removes it, double-click a polygon vertex to remove it.' :
+        tool === 'bbox' ? 'Drag to draw a bounding box.' :
+        tool === 'polygon' ? 'Click to add points. Click the first point, press Enter, or right-click to finish. Esc to cancel.' :
+        (state.zoomDir === 'out' ? 'Click to zoom out. Alt/right-click or click this tool again to switch back to zoom in.' : 'Click to zoom in. Alt+click, right-click, or click this tool again to zoom out.');
+    }
+    redrawCanvas();
+  }
+  document.getElementById('toolSelect').addEventListener('click', () => setTool('select'));
+  document.getElementById('toolBbox').addEventListener('click', () => {
+    if (!requireClass()) return;
+    setTool('bbox');
+  });
+  document.getElementById('toolPolygon').addEventListener('click', () => {
+    if (!requireClass()) return;
+    setTool('polygon');
+  });
+  document.getElementById('toolZoom').addEventListener('click', () => {
+    if (!currentImage()) return;
+    if (state.tool === 'zoom') {
+      state.zoomDir = state.zoomDir === 'in' ? 'out' : 'in';
+      updateZoomToolUI();
+      toolHintText.textContent = state.zoomDir === 'out'
+        ? 'Click to zoom out. Alt/right-click or click this tool again to switch back to zoom in.'
+        : 'Click to zoom in. Alt+click, right-click, or click this tool again to zoom out.';
+    } else {
+      state.zoomDir = 'in';
+      setTool('zoom');
+    }
+  });
+  function updateZoomToolUI() {
+    const btn = document.getElementById('toolZoom');
+    const out = state.tool === 'zoom' && state.zoomDir === 'out';
+    btn.innerHTML = out ? ICON_ZOOM_OUT : ICON_ZOOM_IN;
+    btn.title = out ? 'Zoom out (click again for zoom in)' : 'Zoom in (click again for zoom out)';
+    stage.classList.toggle('tool-zoom-out', out);
+  }
+  function requireClass() {
+    if (!currentImage()) return false;
+    if (!state.activeClassName) {
+      alert('Add a class first (sidebar → Classes), then pick a drawing tool.');
+      document.getElementById('newClassInput').focus();
+      return false;
+    }
+    return true;
+  }
+
+  // ---------- Canvas geometry ----------
+  function getCanvasPos(e) {
+    const rect = stage.getBoundingClientRect();
+    const scaleX = stage.width / rect.width;
+    const scaleY = stage.height / rect.height;
+    const x = Math.max(0, Math.min(stage.width, (e.clientX - rect.left) * scaleX));
+    const y = Math.max(0, Math.min(stage.height, (e.clientY - rect.top) * scaleY));
+    return { x, y };
+  }
+  function closeThreshold() { return 8 / state.zoom; }
+
+  function hitTest(pos) {
+    const im = currentImage();
+    if (!im) return null;
+    for (let i = im.annotations.length - 1; i >= 0; i--) {
+      const a = im.annotations[i];
+      if (a.type === 'bbox') {
+        if (pos.x >= a.x && pos.x <= a.x + a.w && pos.y >= a.y && pos.y <= a.y + a.h) return a;
+      } else {
+        if (pointInPolygon(pos, a.points)) return a;
+      }
+    }
+    return null;
+  }
+
+  // ---------- Editing: move / resize / reshape a selected annotation ----------
+  function handleRadius() { return 7 / state.zoom; }
+  function getHandlePoints(a) {
+    if (a.type === 'bbox') return [[a.x, a.y], [a.x + a.w, a.y], [a.x + a.w, a.y + a.h], [a.x, a.y + a.h]];
+    return a.points;
+  }
+  function hitTestHandle(pos, a) {
+    if (!a) return -1;
+    const pts = getHandlePoints(a);
+    const tol = handleRadius();
+    for (let i = 0; i < pts.length; i++) {
+      if (dist(pos, { x: pts[i][0], y: pts[i][1] }) <= tol) return i;
+    }
+    return -1;
+  }
+  function selectedAnnotation() {
+    const im = currentImage();
+    return im ? im.annotations.find(a => a.id === state.selectedAnnotationId) : null;
+  }
+  function updateSelectCursor(pos) {
+    const sel = selectedAnnotation();
+    let cursor = 'default';
+    if (sel && hitTestHandle(pos, sel) !== -1) cursor = 'grab';
+    else if (hitTest(pos)) cursor = 'move';
+    stage.style.cursor = cursor;
+  }
+  function beginEditDrag(annotation, mode, pos, handleIndex) {
+    editMode = mode;
+    editAnnotation = annotation;
+    editHandleIndex = handleIndex == null ? -1 : handleIndex;
+    editDragOrigin = pos;
+    editSnapshot = annotation.type === 'bbox'
+      ? { x: annotation.x, y: annotation.y, w: annotation.w, h: annotation.h }
+      : { points: annotation.points.map(p => p.slice()) };
+    if (mode === 'handle' && annotation.type === 'bbox') {
+      const opposite = [2, 3, 0, 1][handleIndex];
+      const pts = getHandlePoints(annotation);
+      editFixedCorner = { x: pts[opposite][0], y: pts[opposite][1] };
+    } else {
+      editFixedCorner = null;
+    }
+  }
+  function applyEditDrag(pos) {
+    const a = editAnnotation;
+    if (!a) return;
+    if (editMode === 'handle') {
+      const nx = Math.max(0, Math.min(stage.width, pos.x));
+      const ny = Math.max(0, Math.min(stage.height, pos.y));
+      if (a.type === 'bbox') {
+        const fx = editFixedCorner.x, fy = editFixedCorner.y;
+        a.x = Math.min(fx, nx);
+        a.y = Math.min(fy, ny);
+        a.w = Math.abs(nx - fx);
+        a.h = Math.abs(ny - fy);
+      } else {
+        a.points[editHandleIndex] = [nx, ny];
+      }
+    } else if (editMode === 'move') {
+      const dx0 = pos.x - editDragOrigin.x;
+      const dy0 = pos.y - editDragOrigin.y;
+      if (a.type === 'bbox') {
+        const s = editSnapshot;
+        const dx = Math.max(-s.x, Math.min(stage.width - (s.x + s.w), dx0));
+        const dy = Math.max(-s.y, Math.min(stage.height - (s.y + s.h), dy0));
+        a.x = s.x + dx;
+        a.y = s.y + dy;
+      } else {
+        const s = editSnapshot;
+        const xs = s.points.map(p => p[0]), ys = s.points.map(p => p[1]);
+        const minX = Math.min(...xs), maxX = Math.max(...xs);
+        const minY = Math.min(...ys), maxY = Math.max(...ys);
+        const dx = Math.max(-minX, Math.min(stage.width - maxX, dx0));
+        const dy = Math.max(-minY, Math.min(stage.height - maxY, dy0));
+        a.points = s.points.map(p => [p[0] + dx, p[1] + dy]);
+      }
+    }
+  }
+  function endEditDrag() {
+    editMode = null; editAnnotation = null; editHandleIndex = -1; editSnapshot = null; editFixedCorner = null; editDragOrigin = null;
+  }
+
+  stage.addEventListener('mousedown', (e) => {
+    const im = currentImage();
+    if (!im) return;
+
+    if (state.tool === 'zoom') {
+      if (e.button !== 0 && e.button !== 2) return;
+      e.preventDefault();
+      const zoomOut = e.button === 2 || e.altKey || state.zoomDir === 'out';
+      setZoom(state.zoom * (zoomOut ? 1 / 1.5 : 1.5), e.clientX, e.clientY);
+      return;
+    }
+    if (e.button !== 0) return; // other tools only react to the left mouse button
+
+    const pos = getCanvasPos(e);
+    if (state.tool === 'select') {
+      hideLabelMenu();
+      const sel = selectedAnnotation();
+      const hIdx = sel ? hitTestHandle(pos, sel) : -1;
+      if (hIdx !== -1) {
+        beginEditDrag(sel, 'handle', pos, hIdx);
+        return;
+      }
+      const hit = hitTest(pos);
+      if (hit) {
+        if (hit.id !== state.selectedAnnotationId) selectAnnotation(hit.id);
+        beginEditDrag(hit, 'move', pos);
+      } else {
+        selectAnnotation(null);
+        isPanning = true;
+        panStart = { x: e.clientX, y: e.clientY };
+        panScrollStart = { left: canvasWrap.scrollLeft, top: canvasWrap.scrollTop };
+        stage.classList.add('panning');
+      }
+    } else if (state.tool === 'bbox') {
+      isPointerDown = true;
+      dragStart = pos;
+      draftBBox = { x: pos.x, y: pos.y, w: 0, h: 0 };
+    } else if (state.tool === 'polygon') {
+      if (draftPoints.length > 2 && dist(pos, { x: draftPoints[0][0], y: draftPoints[0][1] }) < closeThreshold()) {
+        finalizePolygon();
+      } else {
+        draftPoints.push([pos.x, pos.y]);
+      }
+      redrawCanvas();
+    }
+  });
+
+  // panning (select tool: drag empty canvas space) can extend beyond the stage element,
+  // so it is tracked on window rather than on the stage's own mousemove handler
+  window.addEventListener('mousemove', (e) => {
+    if (!isPanning || !panStart) return;
+    canvasWrap.scrollLeft = panScrollStart.left - (e.clientX - panStart.x);
+    canvasWrap.scrollTop = panScrollStart.top - (e.clientY - panStart.y);
+  });
+
+  stage.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (state.tool === 'zoom' || state.tool === 'bbox') return;
+    if (state.tool === 'polygon') {
+      if (draftPoints.length >= 3) finalizePolygon();
+      return;
+    }
+    const im = currentImage();
+    if (!im) return;
+    const pos = getCanvasPos(e);
+    const hit = hitTest(pos);
+    if (!hit) { hideLabelMenu(); return; }
+    if (hit.id !== state.selectedAnnotationId) selectAnnotation(hit.id);
+    showLabelMenu(hit, e.clientX, e.clientY);
+  });
+
+  stage.addEventListener('mousemove', (e) => {
+    if (!currentImage()) return;
+    const pos = getCanvasPos(e);
+    if (editMode && editAnnotation) {
+      applyEditDrag(pos);
+      redrawCanvas();
+      return;
+    }
+    if (state.tool === 'select' && !isPanning) {
+      updateSelectCursor(pos);
+    }
+    if (state.tool === 'bbox' && isPointerDown && dragStart) {
+      draftBBox = {
+        x: Math.min(dragStart.x, pos.x), y: Math.min(dragStart.y, pos.y),
+        w: Math.abs(pos.x - dragStart.x), h: Math.abs(pos.y - dragStart.y)
+      };
+      redrawCanvas();
+    } else if (state.tool === 'polygon' && draftPoints.length) {
+      hoverPos = pos;
+      redrawCanvas();
+    }
+  });
+
+  stage.addEventListener('dblclick', (e) => {
+    if (state.tool !== 'select') return;
+    const sel = selectedAnnotation();
+    if (!sel || sel.type !== 'polygon' || sel.points.length <= 3) return;
+    const pos = getCanvasPos(e);
+    const idx = hitTestHandle(pos, sel);
+    if (idx !== -1) {
+      sel.points.splice(idx, 1);
+      redrawCanvas();
+      renderBottomPanel();
+    }
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    if (isPanning) {
+      isPanning = false;
+      panStart = null; panScrollStart = null;
+      stage.classList.remove('panning');
+      if (currentImage()) updateSelectCursor(getCanvasPos(e));
+    }
+    if (editMode) {
+      endEditDrag();
+      renderBottomPanel();
+      renderAnnotList();
+      if (currentImage()) updateSelectCursor(getCanvasPos(e));
+      redrawCanvas();
+    }
+    if (state.tool === 'bbox' && isPointerDown) {
+      isPointerDown = false;
+      if (draftBBox && draftBBox.w > 3 && draftBBox.h > 3) finalizeBBox(draftBBox);
+      draftBBox = null; dragStart = null;
+      setTool('select');
+    }
+  });
+
+  function finalizeBBox(b) {
+    const im = currentImage();
+    if (!im || !state.activeClassName) return;
+    const id = ++annotSeq;
+    im.annotations.push({ id, type: 'bbox', class: state.activeClassName, color: classColor(state.activeClassName), x: b.x, y: b.y, w: b.w, h: b.h });
+    selectAnnotation(id);
+    renderImageList();
+  }
+  function finalizePolygon() {
+    const im = currentImage();
+    if (!im || draftPoints.length < 3 || !state.activeClassName) { draftPoints = []; redrawCanvas(); return; }
+    const id = ++annotSeq;
+    im.annotations.push({ id, type: 'polygon', class: state.activeClassName, color: classColor(state.activeClassName), points: draftPoints.slice() });
+    draftPoints = [];
+    selectAnnotation(id);
+    renderImageList();
+    setTool('select');
+  }
+
+  window.addEventListener('keydown', (e) => {
+    const tag = (document.activeElement && document.activeElement.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    if (e.key === 'Escape') {
+      draftPoints = []; draftBBox = null; isPointerDown = false;
+      hideLabelMenu();
+      selectAnnotation(null);
+      setTool('select');
+    } else if (e.key === 'Enter' && state.tool === 'polygon' && draftPoints.length >= 3) {
+      finalizePolygon();
+    } else if ((e.key === 'Delete' || e.key === 'Backspace') && state.selectedAnnotationId != null) {
+      e.preventDefault();
+      deleteAnnotation(state.selectedAnnotationId);
+    } else if (e.key === 'v' || e.key === 'V') setTool('select');
+    else if ((e.key === 'b' || e.key === 'B') && requireClass()) setTool('bbox');
+    else if ((e.key === 'p' || e.key === 'P') && requireClass()) setTool('polygon');
+    else if ((e.key === 'z' || e.key === 'Z') && currentImage()) { state.zoomDir = 'in'; setTool('zoom'); }
+    else if ((e.key === '+' || e.key === '=') && currentImage()) setZoom(state.zoom * 1.25);
+    else if (e.key === '-' && currentImage()) setZoom(state.zoom / 1.25);
+    else if (e.key === '0' && currentImage()) fitZoom();
+  });
+
+  // ---------- Rendering ----------
+  function redrawCanvas() {
+    const im = currentImage();
+    if (!im) return;
+    ctx.clearRect(0, 0, stage.width, stage.height);
+    ctx.drawImage(im.img, 0, 0, stage.width, stage.height);
+    im.annotations.forEach(a => drawAnnotation(a, a.id === state.selectedAnnotationId));
+    if (state.tool === 'bbox' && draftBBox) drawShapeOutline(draftBBox.x, draftBBox.y, draftBBox.w, draftBBox.h, '#5aa9e6', true);
+    if (state.tool === 'polygon' && draftPoints.length) drawDraftPolygon();
+  }
+
+  function drawShapeOutline(x, y, w, h, color, dashed) {
+    const lw = Math.max(1, 2 / state.zoom);
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = color;
+    if (dashed) ctx.setLineDash([6 / state.zoom, 4 / state.zoom]);
+    ctx.strokeRect(x, y, w, h);
+    ctx.restore();
+  }
+
+  function drawDraftPolygon() {
+    const lw = Math.max(1, 2 / state.zoom);
+    ctx.save();
+    ctx.strokeStyle = '#5aa9e6';
+    ctx.fillStyle = '#5aa9e6';
+    ctx.lineWidth = lw;
+    ctx.setLineDash([6 / state.zoom, 4 / state.zoom]);
+    ctx.beginPath();
+    draftPoints.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+    if (hoverPos) ctx.lineTo(hoverPos.x, hoverPos.y);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    draftPoints.forEach(([x, y], i) => {
+      ctx.beginPath();
+      ctx.arc(x, y, (i === 0 ? 5 : 3.5) / state.zoom, 0, Math.PI * 2);
+      ctx.fillStyle = i === 0 ? '#e6d95a' : '#5aa9e6';
+      ctx.fill();
+    });
+    ctx.restore();
+  }
+
+  function drawAnnotation(a, selected) {
+    const lw = Math.max(1, 2 / state.zoom);
+    ctx.save();
+    ctx.lineWidth = selected ? lw * 1.6 : lw;
+    ctx.strokeStyle = a.color;
+    ctx.fillStyle = hexToRgba(a.color, selected ? 0.35 : 0.2);
+    if (a.type === 'bbox') {
+      ctx.fillRect(a.x, a.y, a.w, a.h);
+      ctx.strokeRect(a.x, a.y, a.w, a.h);
+    } else {
+      ctx.beginPath();
+      a.points.forEach(([x, y], i) => i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+    ctx.restore();
+    drawLabelChip(a);
+    if (selected) drawHandles(a);
+  }
+
+  function drawLabelChip(a) {
+    const fontPx = 13 / state.zoom;
+    ctx.save();
+    ctx.font = `600 ${fontPx}px -apple-system, sans-serif`;
+    const textW = ctx.measureText(a.class).width;
+    const padX = 6 / state.zoom, padY = 4 / state.zoom;
+    let anchorX, anchorY;
+    if (a.type === 'bbox') { anchorX = a.x; anchorY = a.y; }
+    else {
+      anchorX = Math.min(...a.points.map(p => p[0]));
+      anchorY = Math.min(...a.points.map(p => p[1]));
+    }
+    const chipH = fontPx + padY * 2;
+    let chipY = anchorY - chipH - 2 / state.zoom;
+    if (chipY < 0) chipY = anchorY + 2 / state.zoom;
+    ctx.fillStyle = a.color;
+    ctx.fillRect(anchorX, chipY, textW + padX * 2, chipH);
+    ctx.fillStyle = '#14171c';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(a.class, anchorX + padX, chipY + chipH / 2);
+    ctx.restore();
+  }
+
+  function drawHandles(a) {
+    const r = 3.5 / state.zoom;
+    ctx.save();
+    ctx.lineWidth = 1.5 / state.zoom;
+    const pts = a.type === 'bbox'
+      ? [[a.x, a.y], [a.x + a.w, a.y], [a.x + a.w, a.y + a.h], [a.x, a.y + a.h]]
+      : a.points;
+    pts.forEach(([x, y]) => {
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fillStyle = '#14171c';
+      ctx.fill();
+      ctx.strokeStyle = a.color;
+      ctx.stroke();
+    });
+    ctx.restore();
+  }
+
+  // ---------- Annotation list / selection ----------
+  function selectAnnotation(id) {
+    state.selectedAnnotationId = id;
+    renderAnnotList();
+    renderBottomPanel();
+    redrawCanvas();
+  }
+  function deleteAnnotation(id) {
+    const im = currentImage();
+    if (!im) return;
+    im.annotations = im.annotations.filter(a => a.id !== id);
+    if (state.selectedAnnotationId === id) state.selectedAnnotationId = null;
+    renderAnnotList();
+    renderBottomPanel();
+    renderImageList();
+    redrawCanvas();
+    updateStatus();
+  }
+
+  function renderAnnotList() {
+    const im = currentImage();
+    const list = im ? im.annotations : [];
+    annotCountEl.textContent = list.length;
+    if (!list.length) {
+      annotListEl.innerHTML = '<div class="empty-hint">No annotations on this image yet.</div>';
+      updateStatus();
+      return;
+    }
+    annotListEl.innerHTML = '';
+    list.forEach(a => {
+      const row = document.createElement('div');
+      row.className = 'row' + (a.id === state.selectedAnnotationId ? ' selected' : '');
+      const sw = document.createElement('div');
+      sw.className = 'swatch';
+      sw.style.background = a.color;
+      const name = document.createElement('div');
+      name.className = 'rname';
+      name.textContent = a.class;
+      const type = document.createElement('div');
+      type.className = 'rtype';
+      type.textContent = a.type;
+      const del = document.createElement('div');
+      del.className = 'rdel';
+      del.textContent = '✕';
+      del.title = 'Delete annotation';
+      del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteAnnotation(a.id); });
+      row.appendChild(sw);
+      row.appendChild(name);
+      row.appendChild(type);
+      row.appendChild(del);
+      row.addEventListener('click', () => selectAnnotation(a.id));
+      annotListEl.appendChild(row);
+    });
+    updateStatus();
+  }
+
+  // ---------- Bottom panel: tags + attribute editor ----------
+  function renderTagChips() {
+    const im = currentImage();
+    tagChipsEl.innerHTML = '';
+    if (!im) return;
+    im.tags.forEach(tag => {
+      const chip = document.createElement('div');
+      chip.className = 'chip';
+      const span = document.createElement('span');
+      span.textContent = tag;
+      const rm = document.createElement('button');
+      rm.textContent = '×';
+      rm.addEventListener('click', () => {
+        im.tags = im.tags.filter(t => t !== tag);
+        renderTagChips();
+        renderImageList();
+      });
+      chip.appendChild(span);
+      chip.appendChild(rm);
+      tagChipsEl.appendChild(chip);
+    });
+  }
+  newTagInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const im = currentImage();
+    if (!im) return;
+    const val = newTagInput.value.trim();
+    if (val && !im.tags.includes(val)) im.tags.push(val);
+    newTagInput.value = '';
+    renderTagChips();
+  });
+
+  function populateAnnotClassSelect() {
+    annotClassSelect.innerHTML = '';
+    const im = currentImage();
+    const selected = im ? im.annotations.find(a => a.id === state.selectedAnnotationId) : null;
+    const names = state.classes.map(c => c.name);
+    if (selected && !names.includes(selected.class)) names.unshift(selected.class);
+    names.forEach(n => {
+      const opt = document.createElement('option');
+      opt.value = n; opt.textContent = n;
+      annotClassSelect.appendChild(opt);
+    });
+    if (selected) annotClassSelect.value = selected.class;
+  }
+  function setAnnotationClass(a, className) {
+    a.class = className;
+    a.color = classColor(className);
+    renderAnnotList();
+    if (a.id === state.selectedAnnotationId) renderBottomPanel();
+    redrawCanvas();
+  }
+  annotClassSelect.addEventListener('change', () => {
+    const im = currentImage();
+    const a = im && im.annotations.find(a => a.id === state.selectedAnnotationId);
+    if (!a) return;
+    setAnnotationClass(a, annotClassSelect.value);
+  });
+
+  // ---------- Right-click label menu ----------
+  function hideLabelMenu() { labelMenu.classList.add('hidden'); }
+  function showLabelMenu(annotation, x, y) {
+    labelMenu.innerHTML = '';
+    if (!state.classes.length) {
+      const empty = document.createElement('div');
+      empty.className = 'menu-empty';
+      empty.textContent = 'Add a class in the sidebar first, then right-click a shape to relabel it.';
+      labelMenu.appendChild(empty);
+    } else {
+      state.classes.forEach(c => {
+        const item = document.createElement('div');
+        item.className = 'menu-item' + (c.name === annotation.class ? ' current' : '');
+        const sw = document.createElement('span');
+        sw.className = 'menu-swatch';
+        sw.style.background = c.color;
+        const label = document.createElement('span');
+        label.textContent = c.name;
+        item.appendChild(sw);
+        item.appendChild(label);
+        item.addEventListener('click', () => {
+          setAnnotationClass(annotation, c.name);
+          hideLabelMenu();
+        });
+        labelMenu.appendChild(item);
+      });
+      const sep = document.createElement('div');
+      sep.className = 'menu-sep';
+      labelMenu.appendChild(sep);
+    }
+    const del = document.createElement('div');
+    del.className = 'menu-item danger';
+    del.textContent = 'Delete annotation';
+    del.addEventListener('click', () => {
+      deleteAnnotation(annotation.id);
+      hideLabelMenu();
+    });
+    labelMenu.appendChild(del);
+
+    labelMenu.style.left = x + 'px';
+    labelMenu.style.top = y + 'px';
+    labelMenu.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      const rect = labelMenu.getBoundingClientRect();
+      if (rect.right > window.innerWidth) labelMenu.style.left = Math.max(4, window.innerWidth - rect.width - 4) + 'px';
+      if (rect.bottom > window.innerHeight) labelMenu.style.top = Math.max(4, window.innerHeight - rect.height - 4) + 'px';
+    });
+  }
+  window.addEventListener('mousedown', (e) => {
+    if (!labelMenu.classList.contains('hidden') && !labelMenu.contains(e.target)) hideLabelMenu();
+  });
+
+  function metaFor(a) {
+    const im = currentImage();
+    if (!im) return '';
+    if (a.type === 'bbox') {
+      const sx = im.naturalWidth / im.workingWidth, sy = im.naturalHeight / im.workingHeight;
+      const px = Math.round(a.w * sx), py = Math.round(a.h * sy);
+      const pctW = (a.w / im.workingWidth * 100).toFixed(1);
+      const pctH = (a.h / im.workingHeight * 100).toFixed(1);
+      return `${px}×${py} px (original) · ${pctW}% × ${pctH}% of image`;
+    }
+    const area = polygonArea(a.points);
+    const pct = (area / (im.workingWidth * im.workingHeight) * 100).toFixed(2);
+    return `${a.points.length} points · area ≈ ${pct}% of image`;
+  }
+
+  function renderBottomPanel() {
+    renderTagChips();
+    const im = currentImage();
+    const a = im ? im.annotations.find(a => a.id === state.selectedAnnotationId) : null;
+    populateAnnotClassSelect();
+    if (a) {
+      annotEditor.classList.remove('hidden');
+      annotMeta.textContent = metaFor(a);
+    } else {
+      annotEditor.classList.add('hidden');
+    }
+  }
+
+  // ---------- Status bar ----------
+  function updateStatus() {
+    const im = currentImage();
+    const n = im ? im.annotations.length : 0;
+    statusLeft.textContent = `${state.images.length} image${state.images.length === 1 ? '' : 's'}` +
+      (im ? ` · ${n} annotation${n === 1 ? '' : 's'} on "${im.filename}"` : '');
+    zoomStatus.textContent = im ? `zoom ${Math.round(state.zoom * 100)}%` : '';
+  }
+
+  // ---------- Export ----------
+  document.getElementById('exportBtn').addEventListener('click', () => {
+    const embed = document.getElementById('embedImagesChk').checked;
+    const images = state.images.map(im => {
+      const sx = im.naturalWidth / im.workingWidth, sy = im.naturalHeight / im.workingHeight;
+      const annotations = im.annotations.map(a => {
+        const base = { id: a.id, class: a.class, color: a.color, shape_type: a.type };
+        if (a.type === 'bbox') {
+          base.bbox = { x: round2(a.x * sx), y: round2(a.y * sy), width: round2(a.w * sx), height: round2(a.h * sy) };
+          base.bbox_normalized = {
+            x: round4(a.x / im.workingWidth), y: round4(a.y / im.workingHeight),
+            width: round4(a.w / im.workingWidth), height: round4(a.h / im.workingHeight)
+          };
+        } else {
+          base.points = a.points.map(([x, y]) => [round2(x * sx), round2(y * sy)]);
+          base.points_normalized = a.points.map(([x, y]) => [round4(x / im.workingWidth), round4(y / im.workingHeight)]);
+        }
+        return base;
+      });
+      const entry = { filename: im.filename, width: im.naturalWidth, height: im.naturalHeight, tags: im.tags.slice(), annotations };
+      if (embed) entry.image_data = im.dataUrl;
+      return entry;
+    });
+    const payload = {
+      format: 'labelsketch-v1',
+      exported_at: new Date().toISOString(),
+      classes: state.classes.map(c => ({ name: c.name, color: c.color })),
+      images
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `image-labels-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Structured dataset export (renamed files, folders, .zip) ----------
+
+  // Deterministic, dependency-free content hash (two mixed FNV-1a passes -> 48-bit id as hex).
+  // Not cryptographic — just enough spread that unrelated images won't collide in a dataset-sized batch.
+  // Runs on the base64 payload of the data URL, so it works with no crypto.subtle / secure-context requirement
+  // (this tool is often opened directly from disk as a file:// page).
+  function computeHashId(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const b64 = comma === -1 ? dataUrl : dataUrl.slice(comma + 1);
+    let h1 = 0x811c9dc5, h2 = 0x811c9dc5 ^ 0x9e3779b9;
+    for (let i = 0; i < b64.length; i++) {
+      const c = b64.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 0x01000193);
+      h2 = Math.imul(h2 ^ c, 0x85ebca6b);
+    }
+    const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+    const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+    return (hex1 + hex2).slice(0, 12);
+  }
+
+  function dataUrlToBytes(dataUrl) {
+    const comma = dataUrl.indexOf(',');
+    const binary = atob(dataUrl.slice(comma + 1));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function extFromDataUrl(dataUrl) {
+    const m = /^data:image\/([a-zA-Z0-9.+-]+);base64,/.exec(dataUrl);
+    if (!m) return 'png';
+    let ext = m[1].toLowerCase();
+    if (ext === 'jpeg') ext = 'jpg';
+    if (ext === 'svg+xml') ext = 'svg';
+    return ext;
+  }
+
+  function annotationsForDataset(im) {
+    const sx = im.naturalWidth / im.workingWidth, sy = im.naturalHeight / im.workingHeight;
+    return im.annotations.map(a => {
+      const base = { class: a.class, color: a.color, shape_type: a.type };
+      if (a.type === 'bbox') {
+        base.bbox = { x: round2(a.x * sx), y: round2(a.y * sy), width: round2(a.w * sx), height: round2(a.h * sy) };
+        base.bbox_normalized = {
+          x: round4(a.x / im.workingWidth), y: round4(a.y / im.workingHeight),
+          width: round4(a.w / im.workingWidth), height: round4(a.h / im.workingHeight)
+        };
+      } else {
+        base.points = a.points.map(([x, y]) => [round2(x * sx), round2(y * sy)]);
+        base.points_normalized = a.points.map(([x, y]) => [round4(x / im.workingWidth), round4(y / im.workingHeight)]);
+      }
+      return base;
+    });
+  }
+
+  // Minimal "store" (uncompressed) ZIP writer — no external library, so the tool stays a
+  // single offline HTML file. Images are already JPEG/PNG-compressed so storing them
+  // uncompressed inside the archive costs essentially nothing.
+  const CRC_TABLE = (() => {
+    const table = new Uint32Array(256);
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })();
+  function crc32(bytes) {
+    let crc = 0xFFFFFFFF;
+    for (let i = 0; i < bytes.length; i++) crc = CRC_TABLE[(crc ^ bytes[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function dosDateTime(date) {
+    const time = ((date.getHours() & 0x1F) << 11) | ((date.getMinutes() & 0x3F) << 5) | ((date.getSeconds() >> 1) & 0x1F);
+    const day = (((date.getFullYear() - 1980) & 0x7F) << 9) | (((date.getMonth() + 1) & 0xF) << 5) | (date.getDate() & 0x1F);
+    return { time: time & 0xFFFF, date: day & 0xFFFF };
+  }
+  function buildZip(entries) {
+    const { time, date } = dosDateTime(new Date());
+    const parts = [];
+    const central = [];
+    let offset = 0;
+
+    entries.forEach(({ name, data }) => {
+      const nameBytes = new TextEncoder().encode(name);
+      const crc = crc32(data);
+      const size = data.length;
+
+      const local = new Uint8Array(30 + nameBytes.length);
+      const lv = new DataView(local.buffer);
+      lv.setUint32(0, 0x04034b50, true);
+      lv.setUint16(4, 20, true);
+      lv.setUint16(6, 0x0800, true); // UTF-8 filenames
+      lv.setUint16(8, 0, true);      // stored, no compression
+      lv.setUint16(10, time, true);
+      lv.setUint16(12, date, true);
+      lv.setUint32(14, crc, true);
+      lv.setUint32(18, size, true);
+      lv.setUint32(22, size, true);
+      lv.setUint16(26, nameBytes.length, true);
+      lv.setUint16(28, 0, true);
+      local.set(nameBytes, 30);
+      parts.push(local, data);
+
+      const cd = new Uint8Array(46 + nameBytes.length);
+      const cv = new DataView(cd.buffer);
+      cv.setUint32(0, 0x02014b50, true);
+      cv.setUint16(4, 20, true);
+      cv.setUint16(6, 0x0800, true);
+      cv.setUint16(8, 0, true);
+      cv.setUint16(10, time, true);
+      cv.setUint16(12, date, true);
+      cv.setUint32(16, crc, true);
+      cv.setUint32(20, size, true);
+      cv.setUint32(24, size, true);
+      cv.setUint16(28, nameBytes.length, true);
+      cv.setUint16(30, 0, true);
+      cv.setUint16(32, 0, true);
+      cv.setUint16(34, 0, true);
+      cv.setUint16(36, 0, true);
+      cv.setUint32(38, 0, true);
+      cv.setUint32(42, offset, true);
+      cd.set(nameBytes, 46);
+      central.push(cd);
+
+      offset += local.length + data.length;
+    });
+
+    const centralStart = offset;
+    let centralSize = 0;
+    central.forEach(c => { parts.push(c); centralSize += c.length; });
+
+    const eocd = new Uint8Array(22);
+    const ev = new DataView(eocd.buffer);
+    ev.setUint32(0, 0x06054b50, true);
+    ev.setUint16(8, entries.length, true);
+    ev.setUint16(10, entries.length, true);
+    ev.setUint32(12, centralSize, true);
+    ev.setUint32(16, centralStart, true);
+    parts.push(eocd);
+
+    return new Blob(parts, { type: 'application/zip' });
+  }
+
+  document.getElementById('exportZipBtn').addEventListener('click', () => {
+    if (!state.images.length) { alert('Import at least one image first.'); return; }
+    const keepNames = document.getElementById('keepOriginalNamesChk').checked;
+    const usedIds = new Set();
+    const entries = [];
+    const manifestImages = [];
+
+    state.images.forEach(im => {
+      const baseId = im.hashId || computeHashId(im.dataUrl);
+      let finalId = baseId, n = 2;
+      while (usedIds.has(finalId)) { finalId = `${baseId}-${n}`; n++; }
+      usedIds.add(finalId);
+
+      const ext = extFromDataUrl(im.dataUrl);
+      const imagePath = `images/${finalId}.${ext}`;
+      const labelPath = `labels/${finalId}.json`;
+
+      entries.push({ name: imagePath, data: dataUrlToBytes(im.dataUrl) });
+
+      const labelObj = {
+        id: finalId,
+        image: imagePath,
+        width: im.naturalWidth,
+        height: im.naturalHeight,
+        tags: im.tags.slice(),
+        annotations: annotationsForDataset(im)
+      };
+      if (keepNames) labelObj.original_filename = im.filename;
+      entries.push({ name: labelPath, data: new TextEncoder().encode(JSON.stringify(labelObj, null, 2)) });
+
+      manifestImages.push(Object.assign(
+        {
+          id: finalId, image: imagePath, label: labelPath,
+          width: im.naturalWidth, height: im.naturalHeight,
+          tags: im.tags.slice(), annotation_count: im.annotations.length
+        },
+        keepNames ? { original_filename: im.filename } : {}
+      ));
+    });
+
+    const manifest = {
+      format: 'labelsketch-dataset-v1',
+      exported_at: new Date().toISOString(),
+      image_count: state.images.length,
+      classes: state.classes.map(c => ({ name: c.name, color: c.color })),
+      images: manifestImages
+    };
+    entries.push({ name: 'manifest.json', data: new TextEncoder().encode(JSON.stringify(manifest, null, 2)) });
+
+    const blob = buildZip(entries);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `labelsketch-dataset-${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  // ---------- Import labels JSON ----------
+  document.getElementById('importJsonBtn').addEventListener('click', () => document.getElementById('importJsonInput').click());
+  document.getElementById('importJsonInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        applyImportedData(JSON.parse(reader.result));
+      } catch (err) {
+        alert('Could not parse that file as a LabelSketch JSON export.');
+      }
+    };
+    reader.readAsText(file);
+  });
+
+  function applyAnnotationsToImage(target, entry) {
+    (entry.tags || []).forEach(t => { if (!target.tags.includes(t)) target.tags.push(t); });
+    (entry.annotations || []).forEach(a => {
+      const color = a.color || classColor(a.class);
+      if (!state.classes.some(c => c.name === a.class)) state.classes.push({ name: a.class, color });
+      const id = ++annotSeq;
+      if (a.shape_type === 'bbox' && a.bbox_normalized) {
+        const n = a.bbox_normalized;
+        target.annotations.push({
+          id, type: 'bbox', class: a.class, color,
+          x: n.x * target.workingWidth, y: n.y * target.workingHeight,
+          w: n.width * target.workingWidth, h: n.height * target.workingHeight
+        });
+      } else if (a.shape_type === 'polygon' && a.points_normalized) {
+        target.annotations.push({
+          id, type: 'polygon', class: a.class, color,
+          points: a.points_normalized.map(([x, y]) => [x * target.workingWidth, y * target.workingHeight])
+        });
+      }
+    });
+  }
+
+  function applyImportedData(data) {
+    (data.classes || []).forEach(c => {
+      if (!state.classes.some(x => x.name === c.name)) {
+        state.classes.push({ name: c.name, color: c.color || PALETTE[state.classes.length % PALETTE.length] });
+      }
+    });
+    if (!state.activeClassName && state.classes.length) state.activeClassName = state.classes[0].name;
+
+    const skipped = [];
+    let pending = 0, hadAny = false;
+
+    (data.images || []).forEach(entry => {
+      const target = state.images.find(im => im.filename === entry.filename);
+      if (target) {
+        applyAnnotationsToImage(target, entry);
+      } else if (entry.image_data) {
+        hadAny = true;
+        pending++;
+        const img = new Image();
+        img.onload = () => {
+          const scale = Math.min(1, MAX_DIM / Math.max(img.naturalWidth, img.naturalHeight));
+          const workingWidth = Math.max(1, Math.round(img.naturalWidth * scale));
+          const workingHeight = Math.max(1, Math.round(img.naturalHeight * scale));
+          const id = ++imageSeq;
+          const newImg = {
+            id, filename: uniqueName(entry.filename), dataUrl: entry.image_data, img,
+            naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight,
+            workingWidth, workingHeight, tags: [], annotations: [],
+            hashId: computeHashId(entry.image_data)
+          };
+          state.images.push(newImg);
+          applyAnnotationsToImage(newImg, entry);
+          if (state.currentImageId == null) setActiveImage(id); else renderAll();
+          pending--;
+          if (pending === 0) finishImport(skipped);
+        };
+        img.onerror = () => {
+          skipped.push(entry.filename + ' (invalid image data)');
+          pending--;
+          if (pending === 0) finishImport(skipped);
+        };
+        img.src = entry.image_data;
+      } else {
+        skipped.push(entry.filename);
+      }
+    });
+    renderAll();
+    if (!hadAny) finishImport(skipped);
+  }
+  function finishImport(skipped) {
+    if (skipped.length) {
+      alert('No matching loaded image for: ' + skipped.join(', ') +
+        '\n\nImport those image files first (same filename), or use a LabelSketch export with "embed images" checked.');
+    }
+  }
+
+  // ---------- Render all ----------
+  function renderAll() {
+    renderImageList();
+    renderClassList();
+    renderAnnotList();
+    renderBottomPanel();
+    redrawCanvas();
+    updateStatus();
+  }
+
+  showEmpty();
+  renderAll();
+})();
+</script>
+</body>
+</html>
