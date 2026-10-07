@@ -383,7 +383,7 @@
   const ICON_ZOOM_IN = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M11 8v6M8 11h6"/></svg>';
   const ICON_ZOOM_OUT = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/><path d="M8 11h6"/></svg>';
 
-  // ---------- DOM refs ----------
+  // DOM refs
   const stage = document.getElementById('stage');
   const ctx = stage.getContext('2d');
   const canvasWrap = document.getElementById('canvasWrap');
@@ -407,7 +407,7 @@
   const zoomPct = document.getElementById('zoomPct');
   const labelMenu = document.getElementById('labelMenu');
 
-  // ---------- Helpers ----------
+  // Helpers
   function currentImage() {
     return state.images.find(im => im.id === state.currentImageId) || null;
   }
@@ -442,7 +442,7 @@
     return inside;
   }
 
-  // ---------- Image import ----------
+  // Image import
   function uniqueName(name) {
     let candidate = name, n = 2;
     const taken = new Set(state.images.map(im => im.filename));
@@ -540,7 +540,7 @@
     });
   }
 
-  // ---------- Active image / canvas setup ----------
+  // Active image / canvas setup
   function showEmpty() {
     canvasWrap.classList.add('empty');
     emptyState.style.display = 'block';
@@ -619,7 +619,7 @@
     setZoom(state.zoom * factor, e.clientX, e.clientY);
   }, { passive: false });
 
-  // ---------- Classes ----------
+  // Classes
   function addClass(name) {
     name = name.trim();
     if (!name) return;
@@ -675,7 +675,7 @@
     populateAnnotClassSelect();
   }
 
-  // ---------- Tools ----------
+  // Tools
   function setTool(tool) {
     if (tool !== 'select' && !currentImage()) return;
     state.tool = tool;
@@ -740,7 +740,7 @@
     return true;
   }
 
-  // ---------- Canvas geometry ----------
+  // Canvas geometry
   function getCanvasPos(e) {
     const rect = stage.getBoundingClientRect();
     const scaleX = stage.width / rect.width;
@@ -765,7 +765,7 @@
     return null;
   }
 
-  // ---------- Editing: move / resize / reshape a selected annotation ----------
+  // Editing: move / resize / reshape a selected annotation
   function handleRadius() { return 7 / state.zoom; }
   function getHandlePoints(a) {
     if (a.type === 'bbox') return [[a.x, a.y], [a.x + a.w, a.y], [a.x + a.w, a.y + a.h], [a.x, a.y + a.h]];
@@ -1016,7 +1016,7 @@
     else if (e.key === '0' && currentImage()) fitZoom();
   });
 
-  // ---------- Rendering ----------
+  // Rendering
   function redrawCanvas() {
     const im = currentImage();
     if (!im) return;
@@ -1120,7 +1120,7 @@
     ctx.restore();
   }
 
-  // ---------- Annotation list / selection ----------
+  // Annotation list / selection
   function selectAnnotation(id) {
     state.selectedAnnotationId = id;
     renderAnnotList();
@@ -1176,7 +1176,7 @@
     updateStatus();
   }
 
-  // ---------- Bottom panel: tags + attribute editor ----------
+  // Bottom panel: tags + attribute editor
   function renderTagChips() {
     const im = currentImage();
     tagChipsEl.innerHTML = '';
@@ -1235,7 +1235,7 @@
     setAnnotationClass(a, annotClassSelect.value);
   });
 
-  // ---------- Right-click label menu ----------
+  // Right-click label menu
   function hideLabelMenu() { labelMenu.classList.add('hidden'); }
   function showLabelMenu(annotation, x, y) {
     labelMenu.innerHTML = '';
@@ -1315,7 +1315,7 @@
     }
   }
 
-  // ---------- Status bar ----------
+  // Status bar
   function updateStatus() {
     const im = currentImage();
     const n = im ? im.annotations.length : 0;
@@ -1324,7 +1324,7 @@
     zoomStatus.textContent = im ? `zoom ${Math.round(state.zoom * 100)}%` : '';
   }
 
-  // ---------- Export ----------
+  // Export
   document.getElementById('exportBtn').addEventListener('click', () => {
     const embed = document.getElementById('embedImagesChk').checked;
     const images = state.images.map(im => {
@@ -1362,10 +1362,10 @@
     URL.revokeObjectURL(url);
   });
 
-  // ---------- Structured dataset export (renamed files, folders, .zip) ----------
+  // Structured dataset export (renamed files, folders, .zip)
 
   // Deterministic, dependency-free content hash (two mixed FNV-1a passes -> 48-bit id as hex).
-  // Not cryptographic — just enough spread that unrelated images won't collide in a dataset-sized batch.
+  // Not cryptographic - just enough spread that unrelated images won't collide in a dataset-sized batch.
   // Runs on the base64 payload of the data URL, so it works with no crypto.subtle / secure-context requirement
   // (this tool is often opened directly from disk as a file:// page).
   function computeHashId(dataUrl) {
@@ -1417,7 +1417,7 @@
     });
   }
 
-  // Minimal "store" (uncompressed) ZIP writer — no external library, so the tool stays a
+  // Minimal "store" (uncompressed) ZIP writer - no external library, so the tool stays a
   // single offline HTML file. Images are already JPEG/PNG-compressed so storing them
   // uncompressed inside the archive costs essentially nothing.
   const CRC_TABLE = (() => {
@@ -1564,7 +1564,7 @@
     URL.revokeObjectURL(url);
   });
 
-  // ---------- Import labels JSON ----------
+  // Import labels JSON
   document.getElementById('importJsonBtn').addEventListener('click', () => document.getElementById('importJsonInput').click());
   document.getElementById('importJsonInput').addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -1659,7 +1659,7 @@
     }
   }
 
-  // ---------- Render all ----------
+  // Render all
   function renderAll() {
     renderImageList();
     renderClassList();
